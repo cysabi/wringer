@@ -1,3 +1,7 @@
+use webview2_com::Microsoft::Web::WebView2::Win32;
+
 fn main() {
-    println!("Hello, world!");
+    // make a webview
+    // throw it some basic html
+    // call Win32:CapturePreview
 }
