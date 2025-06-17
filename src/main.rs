@@ -189,6 +189,32 @@ impl ApplicationHandler for State {
 }
 
 impl State {
+    fn start_recording_after_delay(&mut self) {
+        self.page_loaded = true;
+        self.should_record = true;
+        println!("Recording enabled");
+    }
+
+    fn cleanup_and_exit(&mut self) {
+        println!("Cleaning up and exiting...");
+        self.is_closing = true;
+        self.should_record = false;
+
+        thread::sleep(Duration::from_millis(100));
+
+        if let Some(mut encoder) = self.encoder.take() {
+            println!("Finalizing encoder");
+            if let Err(e) = encoder.finish() {
+                eprintln!("Failed to finalize video: {}", e);
+            } else {
+                println!("Video finalized successfully");
+            }
+        }
+
+        std::process::exit(0);
+    }
+}
+
 fn main() {
     // make a webview
     // throw it some basic html
