@@ -23,6 +23,13 @@ use video_rs::encode::{Encoder, Settings};
 use video_rs::init as video_init;
 use video_rs::time::Time;
 
+const WIDTH: u32 = 1600;
+const HEIGHT: u32 = 1200;
+
+static SHUTDOWN_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+type SnapshotSender = mpsc::Sender<Vec<u8>>;
+
 fn main() {
     // make a webview
     // throw it some basic html
