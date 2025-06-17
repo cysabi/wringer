@@ -128,6 +128,66 @@ impl State {
     }
 }
 
+impl ApplicationHandler for State {
+    fn resumed(&mut self, el: &ActiveEventLoop) {
+        tracing_subscriber::fmt::init();
+        video_init().expect("video-rs init failed");
+
+        let mut attr = Window::default_attributes();
+        attr.decorations = false;
+        let window = el.create_window(attr).unwrap();
+
+        let settings = Settings::preset_h264_yuv420p(WIDTH as usize, HEIGHT as usize, false);
+        let enc = Encoder::new(Path::new("capture.ts"), settings).unwrap();
+        self.encoder = Some(enc);
+        self.next_pts = Some(Time::zero());
+
+        let webview = WebViewBuilder::new()
+            .with_url("https://tauri.app")
+            .with_bounds(Rect {
+                position: dpi::Position::Physical(PhysicalPosition { x: 0, y: 0 }),
+                size: Size::Physical(dpi::PhysicalSize {
+                    width: WIDTH,
+                    height: HEIGHT,
+                }),
+            })
+            .with_on_page_load_handler(|event, url| match event {
+                wry::PageLoadEvent::Started => {
+                    println!("Page load started: {}", url);
+                }
+                wry::PageLoadEvent::Finished => {
+                    println!("Page load finished: {}", url);
+                }
+            })
+            .build_as_child(&window)
+            .unwrap();
+
+        self.window = Some(window);
+        self.webview = Some(webview);
+
+        el.set_control_flow(winit::event_loop::ControlFlow::Poll);
+        self.start_recording_after_delay();
+    }
+
+    fn window_event(&mut self, _el: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+        println!("{:?}", event);
+
+        if let WindowEvent::CloseRequested = event {
+            self.cleanup_and_exit();
+        }
+    }
+
+    fn about_to_wait(&mut self, _el: &ActiveEventLoop) {
+        if SHUTDOWN_REQUESTED.load(Ordering::Relaxed) {
+            self.cleanup_and_exit();
+            return;
+        }
+
+        self.handle_snapshots();
+        self.request_snapshot(); // Add this to actually take snapshots
+    }
+}
+
 impl State {
 fn main() {
     // make a webview
