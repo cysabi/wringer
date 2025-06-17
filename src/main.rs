@@ -30,6 +30,17 @@ static SHUTDOWN_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 type SnapshotSender = mpsc::Sender<Vec<u8>>;
 
+struct State {
+    window: Option<Window>,
+    webview: Option<wry::WebView>,
+    encoder: Option<Encoder>,
+    next_pts: Option<Time>,
+    should_record: bool,
+    is_closing: bool,
+    page_loaded: bool,
+    snapshot_rx: Option<mpsc::Receiver<Vec<u8>>>,
+    snapshot_tx: Option<SnapshotSender>,
+}
 fn main() {
     // make a webview
     // throw it some basic html
