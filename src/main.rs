@@ -216,7 +216,8 @@ impl State {
 }
 
 fn main() {
-    // make a webview
-    // throw it some basic html
-    // call Win32:CapturePreview
+    let event_loop = EventLoop::new().unwrap();
+    let mut state = State::new();
+
+    event_loop.run_app(&mut state).unwrap();
 }
