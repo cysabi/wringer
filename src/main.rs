@@ -103,7 +103,11 @@ fn main() -> wry::Result<()> {
                             Vec::new()
                         }
                     };
-                    process_png_data(png_data);
+
+                    // let static_data: &'static [u8] = Box::leak(png_data.into_boxed_slice());
+                    // encoder.push_png_buffer(static_data);
+                    // process_png_data(png_data);
+                    let _ = tx_clone.send(png_data);
                 })
                 .unwrap();
 
@@ -116,6 +120,9 @@ fn main() -> wry::Result<()> {
                 event: WindowEvent::CloseRequested,
                 ..
             } => {
+                let _ = tx.send(Vec::new());
+                println!("end reached");
+                encoder.finish().unwrap();
                 *control_flow = ControlFlow::Exit;
             }
             // After screenshot is taken, we can go back to Wait mode for efficiency
