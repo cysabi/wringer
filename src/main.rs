@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-License-Identifier: MIT
 use dpi::Size;
+use gstreamer::prelude::*;
 use std::{
     thread::sleep,
     time::{Duration, Instant},
@@ -23,10 +24,10 @@ fn process_png_data(png_data: Vec<u8>) {
     } else {
         let rgb = image::load_from_memory(&png_data)
             .map_err(|e| format!("PNG decode failed: {}", e))
-            .unwrap()
-            .to_rgb8();
+            .unwrap();
+
         rgb.save("output.png").unwrap();
-        println!("Screenshot saved as output.png");
+        // println!("Screenshot saved as output.png");
     }
 }
 
@@ -102,12 +103,12 @@ fn main() -> wry::Result<()> {
                             Vec::new()
                         }
                     };
-                    // process_png_data(png_data);
+                    process_png_data(png_data);
                 })
                 .unwrap();
 
             count += 1;
-            println!("{}", start_time.elapsed().as_secs() / count);
+            println!("{} / {}", start_time.elapsed().as_secs(), count);
         }
 
         match event {
