@@ -213,7 +213,7 @@ impl PngVideoEncoder {
         appsrc.set_property("is-live", &true);
         appsrc.set_property("stream-type", &gst_app::AppStreamType::Stream);
 
-        encoder.set_property("threads", &0); // auto-detect CPU cores
+        encoder.set_property("threads", &0u32); // auto-detect CPU cores
         encoder.set_property("sliced-threads", &true); // enable slice-based threading
         encoder.set_property("sync-lookahead", &0); // disable lookahead for speed
 
