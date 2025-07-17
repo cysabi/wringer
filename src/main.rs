@@ -96,7 +96,6 @@ fn main() -> wry::Result<()> {
         let encoder =
             PngVideoEncoder::new("output.mp4", WIDTH, HEIGHT, gst::Fraction::new(30, 1)).unwrap();
         encoder.start().unwrap();
-
         while let Ok(png_data) = rx.recv() {
             if png_data.is_empty() {
                 println!("stopping");
@@ -114,7 +113,7 @@ fn main() -> wry::Result<()> {
         *control_flow = ControlFlow::Poll; // Use Poll to keep checking time
 
         // Check if 5 seconds have passed and we haven't taken the screenshot yet
-        if !screenshot_taken && start_time.elapsed() >= Duration::from_secs(5) {
+        if !screenshot_taken && start_time.elapsed() >= Duration::from_secs(7) {
             let tx_clone = tx.clone();
             webview
                 .take_snapshot(None, move |result| {
@@ -133,7 +132,7 @@ fn main() -> wry::Result<()> {
                 })
                 .unwrap();
 
-            if count == 200000 {
+            if count == 2000000 {
                 let _ = tx.send(Vec::new());
                 println!("end reached");
             }
@@ -244,6 +243,33 @@ impl PngVideoEncoder {
     pub fn start(&self) -> Result<(), Box<dyn std::error::Error>> {
         self.pipeline.set_state(gst::State::Playing)?;
         Ok(())
+    }
+
+    pub fn push_png_buffer_with_timestamp(
+        &self,
+        png_data: &'static [u8],
+        timestamp_ns: u64,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut buffer = gst::Buffer::from_slice(png_data);
+
+        // Set timestamp and duration
+        {
+            let buffer_ref = buffer.get_mut().unwrap();
+            buffer_ref.set_pts(gst::ClockTime::from_nseconds(timestamp_ns));
+            buffer_ref.set_duration(gst::ClockTime::from_nseconds(
+                1_000_000_000 / self.framerate.numer() as u64 * self.framerate.denom() as u64,
+            ));
+        }
+
+        match self.appsrc.push_buffer(buffer) {
+            Ok(gst::FlowSuccess::Ok) => Ok(()),
+            Ok(gst::FlowSuccess::CustomSuccess) => Ok(()),
+            Ok(gst::FlowSuccess::CustomSuccess2) => Ok(()),
+            Ok(gst::FlowSuccess::CustomSuccess1) => Ok(()),
+            Err(gst::FlowError::Flushing) => Err("Pipeline is flushing".into()),
+            Err(gst::FlowError::Eos) => Err("End of stream".into()),
+            Err(err) => Err(format!("Failed to push buffer: {:?}", err).into()),
+        }
     }
 
     pub fn push_png_buffer(
