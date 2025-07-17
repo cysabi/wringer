@@ -93,13 +93,15 @@ fn main() -> wry::Result<()> {
 
     let (tx, rx) = mpsc::channel::<(Vec<u8>, u64)>();
 
+    let encoder =
+        PngVideoEncoder::new("output.mp4", WIDTH, HEIGHT, gst::Fraction::new(30, 1)).unwrap();
+
     // Start encoder in a separate thread
     let encoder_handle = thread::spawn(move || {
-        let encoder =
-            PngVideoEncoder::new("output.mp4", WIDTH, HEIGHT, gst::Fraction::new(30, 1)).unwrap();
         encoder.start().unwrap();
         while let Ok((png_data, timestamp)) = rx.recv() {
-            if png_data.is_empty() {
+            println!("{}", timestamp);
+            if png_data.is_empty() || timestamp == 0 {
                 println!("stopping");
                 encoder.finish().unwrap();
 
@@ -113,6 +115,8 @@ fn main() -> wry::Result<()> {
         }
     });
 
+    let mut active_webview = false;
+
     // Run the event loop
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll; // Use Poll to keep checking time
@@ -120,9 +124,7 @@ fn main() -> wry::Result<()> {
         let now = Instant::now();
 
         // Check if 5 seconds have passed and we haven't taken the screenshot yet
-        if (now.duration_since(last_frame_time) >= FRAME_DURATION)
-            && start_time.elapsed() >= Duration::from_secs(7)
-        {
+        if (now.duration_since(last_frame_time) >= FRAME_DURATION) && active_webview {
             let tx_clone = tx.clone();
             webview
                 .take_snapshot(None, move |result| {
@@ -144,7 +146,11 @@ fn main() -> wry::Result<()> {
 
             last_frame_time = now;
 
-            if count == 400 {
+            if count == 300 {
+                println!("{}", start_time.elapsed().as_millis())
+            }
+
+            if count == 100 {
                 let _ = tx.send((Vec::new(), 0u64));
                 println!("end reached");
             }
@@ -160,7 +166,10 @@ fn main() -> wry::Result<()> {
             } => {
                 *control_flow = ControlFlow::Exit;
             }
-            _ => {}
+            Event::RedrawRequested(_) => {
+                active_webview = true;
+            }
+            _ => (),
         }
     });
 }
