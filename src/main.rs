@@ -254,33 +254,3 @@ impl PngVideoEncoder {
         Ok(())
     }
 }
-
-// Example usage
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let encoder = PngVideoEncoder::new(
-        "output.mp4",
-        1920,
-        1080,
-        gst::Fraction::new(30, 1), // 30 fps
-    )?;
-
-    encoder.start()?;
-
-    // Example: Push some PNG image data
-    // In practice, you'd load actual PNG files or generate PNG data
-    let png_files = vec!["frame1.png", "frame2.png", "frame3.png"];
-
-    for png_file in png_files {
-        // Load PNG data (you'd implement this based on your source)
-        let png_data = std::fs::read(png_file)?;
-        encoder.push_png_buffer(&png_data)?;
-
-        // Optional: add delay between frames if needed
-        std::thread::sleep(std::time::Duration::from_millis(33)); // ~30fps
-    }
-
-    encoder.finish()?;
-    println!("Video encoding completed!");
-
-    Ok(())
-}
