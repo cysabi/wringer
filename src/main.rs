@@ -15,9 +15,9 @@ use wry::WebViewBuilder;
 use wry::WebViewExtMacOS;
 
 const WIDTH: u32 = 920;
-const HEIGHT: u32 = 880;
+const HEIGHT: u32 = 480;
 
-fn process_png_data(png_data: Vec<u8>, name: String) {
+fn process_png_data(png_data: Vec<u8>) {
     if png_data.is_empty() {
         println!("No PNG data received");
     } else {
@@ -25,7 +25,7 @@ fn process_png_data(png_data: Vec<u8>, name: String) {
             .map_err(|e| format!("PNG decode failed: {}", e))
             .unwrap()
             .to_rgb8();
-        rgb.save(name).unwrap();
+        rgb.save("output.png").unwrap();
         println!("Screenshot saved as output.png");
     }
 }
@@ -38,7 +38,6 @@ fn main() -> wry::Result<()> {
     });
     let window = WindowBuilder::new()
         .with_inner_size(size)
-        .with_decorations(false)
         .build(&event_loop)
         .unwrap();
 
@@ -86,16 +85,14 @@ fn main() -> wry::Result<()> {
 
     println!("Starting webview, will take screenshot in 5 seconds...");
 
-    let mut count = 0;
+    let mut count = 1;
 
     // Run the event loop
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll; // Use Poll to keep checking time
 
         // Check if 5 seconds have passed and we haven't taken the screenshot yet
-        if !screenshot_taken && start_time.elapsed() >= Duration::from_secs(10) {
-            println!("Taking screenshot...");
-
+        if !screenshot_taken && start_time.elapsed() >= Duration::from_secs(5) {
             webview
                 .take_snapshot(None, move |result| {
                     let png_data = match result {
@@ -105,16 +102,13 @@ fn main() -> wry::Result<()> {
                             Vec::new()
                         }
                     };
-
-                    let name = format!("output{}.png", count.to_string());
-                    // process_png_data(png_data, name);
+                    // process_png_data(png_data);
                 })
                 .unwrap();
 
             count += 1;
+            println!("{}", start_time.elapsed().as_secs() / count);
         }
-
-        println!("{}", start_time.elapsed().as_secs() / count);
 
         match event {
             Event::WindowEvent {
