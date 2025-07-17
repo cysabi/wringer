@@ -214,21 +214,17 @@ impl PngVideoEncoder {
         Ok(())
     }
 
-    pub fn push_png_buffer(&self, png_data: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn push_png_buffer(
+        &self,
+        png_data: &'static [u8],
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let buffer = gst::Buffer::from_slice(png_data);
-
-        // Set buffer timestamp (you may want to calculate this based on frame index)
-        if let Some(clock) = self.pipeline.clock() {
-            let base_time = self.pipeline.base_time();
-            let now = clock.time();
-            if let Some(running_time) = now.checked_sub(base_time) {
-                let mut buffer_ref = buffer.make_mut();
-                buffer_ref.set_pts(running_time);
-            }
-        }
 
         match self.appsrc.push_buffer(buffer) {
             Ok(gst::FlowSuccess::Ok) => Ok(()),
+            Ok(gst::FlowSuccess::CustomSuccess) => Ok(()),
+            Ok(gst::FlowSuccess::CustomSuccess2) => Ok(()),
+            Ok(gst::FlowSuccess::CustomSuccess1) => Ok(()),
             Err(gst::FlowError::Flushing) => Err("Pipeline is flushing".into()),
             Err(gst::FlowError::Eos) => Err("End of stream".into()),
             Err(err) => Err(format!("Failed to push buffer: {:?}", err).into()),
