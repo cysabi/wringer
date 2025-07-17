@@ -206,7 +206,9 @@ impl PngVideoEncoder {
 
         let pngdec = gst::ElementFactory::make("pngdec").build()?;
         let videoconvert = gst::ElementFactory::make("videoconvert").build()?;
-        let encoder = gst::ElementFactory::make("x264enc").build()?;
+        let encoder = gst::ElementFactory::make("x264enc")
+            .property_from_str("speed-preset", "slow") // or "slower", "veryslow" for best quality
+            .build()?;
         let muxer = gst::ElementFactory::make("mp4mux").build()?;
         let filesink = gst::ElementFactory::make("filesink").build()?;
 
