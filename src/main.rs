@@ -18,6 +18,8 @@ use wry::dpi::Size;
 
 const WIDTH: u32 = 920;
 const HEIGHT: u32 = 480;
+const FPS: u32 = 30;
+const FRAME_DURATION: Duration = Duration::from_millis(1000 / FPS as u64);
 
 fn process_png_data(png_data: Vec<u8>) {
     if png_data.is_empty() {
@@ -83,20 +85,20 @@ fn main() -> wry::Result<()> {
 
     // Track when we started and whether we've taken the screenshot
     let start_time = Instant::now();
-    let mut screenshot_taken = false;
+    let mut last_frame_time = Instant::now();
 
     println!("Starting webview, will take screenshot in 5 seconds...");
 
     let mut count = 1;
 
-    let (tx, rx) = mpsc::channel::<Vec<u8>>();
+    let (tx, rx) = mpsc::channel::<(Vec<u8>, u64)>();
 
     // Start encoder in a separate thread
     let encoder_handle = thread::spawn(move || {
         let encoder =
             PngVideoEncoder::new("output.mp4", WIDTH, HEIGHT, gst::Fraction::new(30, 1)).unwrap();
         encoder.start().unwrap();
-        while let Ok(png_data) = rx.recv() {
+        while let Ok((png_data, timestamp)) = rx.recv() {
             if png_data.is_empty() {
                 println!("stopping");
                 encoder.finish().unwrap();
@@ -104,7 +106,10 @@ fn main() -> wry::Result<()> {
                 break; // Signal to stop
             }
             let static_data: &'static [u8] = Box::leak(png_data.into_boxed_slice());
-            encoder.push_png_buffer(static_data).unwrap();
+            println!("whattt");
+            encoder
+                .push_png_buffer_with_timestamp(static_data, timestamp)
+                .unwrap();
         }
     });
 
@@ -112,8 +117,12 @@ fn main() -> wry::Result<()> {
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll; // Use Poll to keep checking time
 
+        let now = Instant::now();
+
         // Check if 5 seconds have passed and we haven't taken the screenshot yet
-        if !screenshot_taken && start_time.elapsed() >= Duration::from_secs(7) {
+        if (now.duration_since(last_frame_time) >= FRAME_DURATION)
+            && start_time.elapsed() >= Duration::from_secs(7)
+        {
             let tx_clone = tx.clone();
             webview
                 .take_snapshot(None, move |result| {
@@ -128,12 +137,15 @@ fn main() -> wry::Result<()> {
                     // let static_data: &'static [u8] = Box::leak(png_data.into_boxed_slice());
                     // encoder.push_png_buffer(static_data);
                     // process_png_data(png_data);
-                    let _ = tx_clone.send(png_data);
+                    let timestamp_ns = count as u64 * (1_000_000_000 / FPS as u64);
+                    let _ = tx_clone.send((png_data, timestamp_ns));
                 })
                 .unwrap();
 
-            if count == 2000000 {
-                let _ = tx.send(Vec::new());
+            last_frame_time = now;
+
+            if count == 400 {
+                let _ = tx.send((Vec::new(), 0u64));
                 println!("end reached");
             }
 
@@ -147,10 +159,6 @@ fn main() -> wry::Result<()> {
                 ..
             } => {
                 *control_flow = ControlFlow::Exit;
-            }
-            // After screenshot is taken, we can go back to Wait mode for efficiency
-            Event::MainEventsCleared if screenshot_taken => {
-                *control_flow = ControlFlow::Wait;
             }
             _ => {}
         }
