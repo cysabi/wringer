@@ -1,10 +1,10 @@
 // Copyright 2020-2023 Tauri Programme within The Commons Conservancy
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-License-Identifier: MIT
-use dpi::Size;
 use gstreamer::prelude::*;
 use std::{
-    thread::sleep,
+    sync::mpsc,
+    thread::{self, sleep},
     time::{Duration, Instant},
 };
 use tao::{
@@ -14,6 +14,7 @@ use tao::{
 };
 use wry::WebViewBuilder;
 use wry::WebViewExtMacOS;
+use wry::dpi::Size;
 
 const WIDTH: u32 = 920;
 const HEIGHT: u32 = 480;
@@ -33,7 +34,7 @@ fn process_png_data(png_data: Vec<u8>) {
 
 fn main() -> wry::Result<()> {
     let event_loop = EventLoop::new();
-    let size = Size::Physical(dpi::PhysicalSize {
+    let size = Size::Physical(wry::dpi::PhysicalSize {
         width: WIDTH,
         height: HEIGHT,
     });
@@ -88,12 +89,32 @@ fn main() -> wry::Result<()> {
 
     let mut count = 1;
 
+    let (tx, rx) = mpsc::channel::<Vec<u8>>();
+
+    // Start encoder in a separate thread
+    let encoder_handle = thread::spawn(move || {
+        let encoder =
+            PngVideoEncoder::new("output.mp4", WIDTH, HEIGHT, gst::Fraction::new(30, 1)).unwrap();
+        encoder.start().unwrap();
+
+        while let Ok(png_data) = rx.recv() {
+            if png_data.is_empty() {
+                println!("stopping");
+
+                break; // Signal to stop
+            }
+            let static_data: &'static [u8] = Box::leak(png_data.into_boxed_slice());
+            encoder.push_png_buffer(static_data).unwrap();
+        }
+    });
+
     // Run the event loop
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll; // Use Poll to keep checking time
 
         // Check if 5 seconds have passed and we haven't taken the screenshot yet
         if !screenshot_taken && start_time.elapsed() >= Duration::from_secs(5) {
+            let tx_clone = tx.clone();
             webview
                 .take_snapshot(None, move |result| {
                     let png_data = match result {
