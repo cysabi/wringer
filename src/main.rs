@@ -197,7 +197,6 @@ impl PngVideoEncoder {
 
         let pngdec = gst::ElementFactory::make("pngdec").build()?;
         let videoconvert = gst::ElementFactory::make("videoconvert").build()?;
-        let videoscale = gst::ElementFactory::make("videoscale").build()?;
         let encoder = gst::ElementFactory::make("x264enc").build()?;
         let muxer = gst::ElementFactory::make("mp4mux").build()?;
         let filesink = gst::ElementFactory::make("filesink").build()?;
@@ -222,7 +221,6 @@ impl PngVideoEncoder {
             &appsrc.clone().upcast::<gst::Element>(),
             &pngdec,
             &videoconvert,
-            &videoscale,
             &encoder,
             &muxer,
             &filesink,
@@ -233,7 +231,6 @@ impl PngVideoEncoder {
             &appsrc.clone().upcast::<gst::Element>(),
             &pngdec,
             &videoconvert,
-            &videoscale,
             &encoder,
             &muxer,
             &filesink,
