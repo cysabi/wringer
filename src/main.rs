@@ -127,6 +127,11 @@ fn main() -> wry::Result<()> {
     });
 }
 
+use gstreamer as gst;
+use gstreamer::prelude::*;
+use gstreamer_app as gst_app;
+use gstreamer_video as gst_video;
+
 pub struct PngVideoEncoder {
     pipeline: gst::Pipeline,
     appsrc: gst_app::AppSrc,
@@ -144,7 +149,7 @@ impl PngVideoEncoder {
     ) -> Result<Self, Box<dyn std::error::Error>> {
         gst::init()?;
 
-        let pipeline = gst::Pipeline::new(None);
+        let pipeline = gst::Pipeline::new();
 
         // Create elements
         let appsrc = gst::ElementFactory::make("appsrc")
@@ -170,10 +175,6 @@ impl PngVideoEncoder {
         appsrc.set_property("format", &gst::Format::Time);
         appsrc.set_property("is-live", &true);
         appsrc.set_property("stream-type", &gst_app::AppStreamType::Stream);
-
-        // Configure encoder
-        encoder.set_property("tune", &"zerolatency");
-        encoder.set_property("speed-preset", &"fast");
 
         // Configure file sink
         filesink.set_property("location", &output_path);
