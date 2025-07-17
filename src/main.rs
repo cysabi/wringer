@@ -16,8 +16,8 @@ use wry::WebViewBuilder;
 use wry::WebViewExtMacOS;
 use wry::dpi::Size;
 
-const WIDTH: u32 = 920;
-const HEIGHT: u32 = 480;
+const WIDTH: u32 = 1920;
+const HEIGHT: u32 = 1080;
 const FPS: u32 = 30;
 const FRAME_DURATION: Duration = Duration::from_millis(1000 / FPS as u64);
 
@@ -46,7 +46,7 @@ fn main() -> wry::Result<()> {
         .unwrap();
 
     let builder = WebViewBuilder::new()
-        .with_url("http://tauri.app")
+        .with_url("https://www.sagejenson.com/36points/")
         .with_drag_drop_handler(|e| {
             match e {
                 wry::DragDropEvent::Enter { paths, position } => {
