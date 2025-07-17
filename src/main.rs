@@ -100,6 +100,7 @@ fn main() -> wry::Result<()> {
         while let Ok(png_data) = rx.recv() {
             if png_data.is_empty() {
                 println!("stopping");
+                encoder.finish().unwrap();
 
                 break; // Signal to stop
             }
@@ -132,6 +133,11 @@ fn main() -> wry::Result<()> {
                 })
                 .unwrap();
 
+            if count == 200000 {
+                let _ = tx.send(Vec::new());
+                println!("end reached");
+            }
+
             count += 1;
             println!("{} / {}", start_time.elapsed().as_secs(), count);
         }
@@ -141,9 +147,6 @@ fn main() -> wry::Result<()> {
                 event: WindowEvent::CloseRequested,
                 ..
             } => {
-                let _ = tx.send(Vec::new());
-                println!("end reached");
-                encoder.finish().unwrap();
                 *control_flow = ControlFlow::Exit;
             }
             // After screenshot is taken, we can go back to Wait mode for efficiency
