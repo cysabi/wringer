@@ -1,223 +1,133 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+// Copyright 2020-2023 Tauri Programme within The Commons Conservancy
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
+use dpi::Size;
 use std::{
-    path::Path,
-    sync::{Arc, Mutex, mpsc},
-    thread,
-    time::Duration,
+    thread::sleep,
+    time::{Duration, Instant},
 };
-
-use dpi::{PhysicalPosition, Size};
-use ndarray::Array3;
-use tracing_subscriber;
-use winit::{
-    application::ApplicationHandler,
-    event::WindowEvent,
-    event_loop::{ActiveEventLoop, EventLoop},
-    window::{Window, WindowId},
+use tao::{
+    event::{Event, WindowEvent},
+    event_loop::{ControlFlow, EventLoop},
+    window::WindowBuilder,
 };
-use wry::Rect;
 use wry::WebViewBuilder;
 use wry::WebViewExtMacOS;
 
-use video_rs::encode::{Encoder, Settings};
-use video_rs::init as video_init;
-use video_rs::time::Time;
+const WIDTH: u32 = 920;
+const HEIGHT: u32 = 880;
 
-const WIDTH: u32 = 1600;
-const HEIGHT: u32 = 1200;
-
-static SHUTDOWN_REQUESTED: AtomicBool = AtomicBool::new(false);
-
-type SnapshotSender = mpsc::Sender<Vec<u8>>;
-
-struct State {
-    window: Option<Window>,
-    webview: Option<wry::WebView>,
-    encoder: Option<Encoder>,
-    next_pts: Option<Time>,
-    should_record: bool,
-    is_closing: bool,
-    page_loaded: bool,
-    snapshot_rx: Option<mpsc::Receiver<Vec<u8>>>,
-    snapshot_tx: Option<SnapshotSender>,
+fn process_png_data(png_data: Vec<u8>, name: String) {
+    if png_data.is_empty() {
+        println!("No PNG data received");
+    } else {
+        let rgb = image::load_from_memory(&png_data)
+            .map_err(|e| format!("PNG decode failed: {}", e))
+            .unwrap()
+            .to_rgb8();
+        rgb.save(name).unwrap();
+        println!("Screenshot saved as output.png");
+    }
 }
 
-impl State {
-    fn new() -> Self {
-        let (snapshot_tx, snapshot_rx) = mpsc::channel();
+fn main() -> wry::Result<()> {
+    let event_loop = EventLoop::new();
+    let size = Size::Physical(dpi::PhysicalSize {
+        width: WIDTH,
+        height: HEIGHT,
+    });
+    let window = WindowBuilder::new()
+        .with_inner_size(size)
+        .with_decorations(false)
+        .build(&event_loop)
+        .unwrap();
 
-        State {
-            window: None,
-            webview: None,
-            encoder: None,
-            next_pts: None,
-            should_record: false,
-            is_closing: false,
-            page_loaded: false,
-            snapshot_rx: Some(snapshot_rx),
-            snapshot_tx: Some(snapshot_tx),
-        }
-    }
-
-    fn handle_snapshots(&mut self) {
-        // Fix borrowing issue by taking ownership temporarily
-        if let Some(rx) = self.snapshot_rx.take() {
-            let mut snapshots = Vec::new();
-
-            // Collect all available snapshots
-            while let Ok(png_data) = rx.try_recv() {
-                snapshots.push(png_data);
-            }
-
-            // Put the receiver back
-            self.snapshot_rx = Some(rx);
-
-            // Process collected snapshots
-            for png_data in snapshots {
-                if self.is_closing || !self.should_record {
-                    continue;
+    let builder = WebViewBuilder::new()
+        .with_url("http://tauri.app")
+        .with_drag_drop_handler(|e| {
+            match e {
+                wry::DragDropEvent::Enter { paths, position } => {
+                    println!("DragEnter: {position:?} {paths:?} ")
                 }
-
-                if let Err(e) = self.encode_frame(png_data) {
-                    eprintln!("Failed to encode frame: {}", e);
+                wry::DragDropEvent::Over { position } => println!("DragOver: {position:?} "),
+                wry::DragDropEvent::Drop { paths, position } => {
+                    println!("DragDrop: {position:?} {paths:?} ")
                 }
+                wry::DragDropEvent::Leave => println!("DragLeave"),
+                _ => {}
             }
-        }
-    }
-
-    fn encode_frame(&mut self, png_data: Vec<u8>) -> Result<(), String> {
-        let rgb = image::load_from_memory(&png_data)
-            .map_err(|e| format!("PNG decode failed: {}", e))?
-            .to_rgb8();
-
-        let frame = Array3::from_shape_fn((HEIGHT as usize, WIDTH as usize, 3), |(y, x, c)| {
-            rgb.get_pixel(x as u32, y as u32).0[c]
+            true
         });
 
-        if let (Some(encoder), Some(pts)) = (&mut self.encoder, &mut self.next_pts) {
-            encoder
-                .encode(&frame, *pts)
-                .map_err(|e| format!("Failed to encode frame: {}", e))?;
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "android"
+    ))]
+    let webview = builder.build(&window)?;
 
-            let frame_duration = Time::from_nth_of_a_second(60);
-            *pts = pts.aligned_with(frame_duration).add();
+    #[cfg(not(any(
+        target_os = "windows",
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "android"
+    )))]
+    let webview = {
+        use tao::platform::unix::WindowExtUnix;
+        use wry::WebViewBuilderExtUnix;
+        let vbox = window.default_vbox().unwrap();
+        builder.build_gtk(vbox)?
+    };
 
-            Ok(())
-        } else {
-            Err("Encoder or PTS not available".to_string())
-        }
-    }
+    // Track when we started and whether we've taken the screenshot
+    let start_time = Instant::now();
+    let mut screenshot_taken = false;
 
-    fn request_snapshot(&self) {
-        if !self.should_record || self.is_closing || !self.page_loaded {
-            return;
-        }
+    println!("Starting webview, will take screenshot in 5 seconds...");
 
-        if let (Some(webview), Some(tx)) = (&self.webview, &self.snapshot_tx) {
-            let tx_clone = tx.clone();
+    let mut count = 0;
 
-            let _ = webview.take_snapshot(None, move |result| match result {
-                Ok(png_data) => {
-                    let _ = tx_clone.send(png_data);
-                }
-                Err(e) => {
-                    eprintln!("Snapshot failed: {:?}", e);
-                }
-            });
-        }
-    }
-}
+    // Run the event loop
+    event_loop.run(move |event, _, control_flow| {
+        *control_flow = ControlFlow::Poll; // Use Poll to keep checking time
 
-impl ApplicationHandler for State {
-    fn resumed(&mut self, el: &ActiveEventLoop) {
-        tracing_subscriber::fmt::init();
-        video_init().expect("video-rs init failed");
+        // Check if 5 seconds have passed and we haven't taken the screenshot yet
+        if !screenshot_taken && start_time.elapsed() >= Duration::from_secs(10) {
+            println!("Taking screenshot...");
 
-        let mut attr = Window::default_attributes();
-        attr.decorations = false;
-        let window = el.create_window(attr).unwrap();
+            webview
+                .take_snapshot(None, move |result| {
+                    let png_data = match result {
+                        Ok(png_data) => png_data,
+                        Err(e) => {
+                            eprintln!("Error taking snapshot: {}", e);
+                            Vec::new()
+                        }
+                    };
 
-        let settings = Settings::preset_h264_yuv420p(WIDTH as usize, HEIGHT as usize, false);
-        let enc = Encoder::new(Path::new("capture.ts"), settings).unwrap();
-        self.encoder = Some(enc);
-        self.next_pts = Some(Time::zero());
+                    let name = format!("output{}.png", count.to_string());
+                    // process_png_data(png_data, name);
+                })
+                .unwrap();
 
-        let webview = WebViewBuilder::new()
-            .with_url("https://tauri.app")
-            .with_bounds(Rect {
-                position: dpi::Position::Physical(PhysicalPosition { x: 0, y: 0 }),
-                size: Size::Physical(dpi::PhysicalSize {
-                    width: WIDTH,
-                    height: HEIGHT,
-                }),
-            })
-            .with_on_page_load_handler(|event, url| match event {
-                wry::PageLoadEvent::Started => {
-                    println!("Page load started: {}", url);
-                }
-                wry::PageLoadEvent::Finished => {
-                    println!("Page load finished: {}", url);
-                }
-            })
-            .build_as_child(&window)
-            .unwrap();
-
-        self.window = Some(window);
-        self.webview = Some(webview);
-
-        el.set_control_flow(winit::event_loop::ControlFlow::Poll);
-        self.start_recording_after_delay();
-    }
-
-    fn window_event(&mut self, _el: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
-        println!("{:?}", event);
-
-        if let WindowEvent::CloseRequested = event {
-            self.cleanup_and_exit();
-        }
-    }
-
-    fn about_to_wait(&mut self, _el: &ActiveEventLoop) {
-        if SHUTDOWN_REQUESTED.load(Ordering::Relaxed) {
-            self.cleanup_and_exit();
-            return;
+            count += 1;
         }
 
-        self.handle_snapshots();
-        self.request_snapshot(); // Add this to actually take snapshots
-    }
-}
+        println!("{}", start_time.elapsed().as_secs() / count);
 
-impl State {
-    fn start_recording_after_delay(&mut self) {
-        self.page_loaded = true;
-        self.should_record = true;
-        println!("Recording enabled");
-    }
-
-    fn cleanup_and_exit(&mut self) {
-        println!("Cleaning up and exiting...");
-        self.is_closing = true;
-        self.should_record = false;
-
-        thread::sleep(Duration::from_millis(100));
-
-        if let Some(mut encoder) = self.encoder.take() {
-            println!("Finalizing encoder");
-            if let Err(e) = encoder.finish() {
-                eprintln!("Failed to finalize video: {}", e);
-            } else {
-                println!("Video finalized successfully");
+        match event {
+            Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                ..
+            } => {
+                *control_flow = ControlFlow::Exit;
             }
+            // After screenshot is taken, we can go back to Wait mode for efficiency
+            Event::MainEventsCleared if screenshot_taken => {
+                *control_flow = ControlFlow::Wait;
+            }
+            _ => {}
         }
-
-        std::process::exit(0);
-    }
-}
-
-fn main() {
-    let event_loop = EventLoop::new().unwrap();
-    let mut state = State::new();
-
-    event_loop.run_app(&mut state).unwrap();
+    });
 }
