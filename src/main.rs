@@ -46,7 +46,7 @@ fn main() -> wry::Result<()> {
         .unwrap();
 
     let builder = WebViewBuilder::new()
-        .with_url("https://www.sagejenson.com/36points/")
+        .with_url("https://www.apple.com")
         .with_drag_drop_handler(|e| {
             match e {
                 wry::DragDropEvent::Enter { paths, position } => {
@@ -94,7 +94,7 @@ fn main() -> wry::Result<()> {
     let (tx, rx) = mpsc::channel::<(Vec<u8>, u64)>();
 
     let encoder =
-        PngVideoEncoder::new("output.mp4", WIDTH, HEIGHT, gst::Fraction::new(30, 1)).unwrap();
+        PngVideoEncoder::new("output.mkv", WIDTH, HEIGHT, gst::Fraction::new(30, 1)).unwrap();
 
     // Start encoder in a separate thread
     let encoder_handle = thread::spawn(move || {
@@ -150,7 +150,7 @@ fn main() -> wry::Result<()> {
                 println!("{}", start_time.elapsed().as_millis())
             }
 
-            if count == 100 {
+            if count == 400 {
                 let _ = tx.send((Vec::new(), 0u64));
                 println!("end reached");
             }
@@ -204,12 +204,24 @@ impl PngVideoEncoder {
             .downcast::<gst_app::AppSrc>()
             .unwrap();
 
+        let h265parse = gst::ElementFactory::make("h265parse").build()?;
         let pngdec = gst::ElementFactory::make("pngdec").build()?;
         let videoconvert = gst::ElementFactory::make("videoconvert").build()?;
-        let encoder = gst::ElementFactory::make("x264enc")
-            .property_from_str("speed-preset", "slow")
-            .build()?;
-        let muxer = gst::ElementFactory::make("mp4mux").build()?;
+
+        let encoder = gst::ElementFactory::make("x265enc")
+            .build()
+            .or_else(|_| gst::ElementFactory::make("nvh265enc").build()) // NVIDIA
+            .or_else(|_| gst::ElementFactory::make("vaapih265enc").build()) // Intel/AMD
+            .or_else(|_| gst::ElementFactory::make("qsvh265enc").build()) // Intel QuickSync
+            .or_else(|_| gst::ElementFactory::make("avenc_libx265").build()) // FFmpeg libx265
+            .or_else(|_| gst::ElementFactory::make("avenc_hevc_nvenc").build()) // FFmpeg NVIDIA
+            .or_else(|_| {
+                gst::ElementFactory::make("x264enc")
+                    .property_from_str("speed-preset", "slow")
+                    .build()
+            })?;
+
+        let muxer = gst::ElementFactory::make("matroskamux").build()?;
         let filesink = gst::ElementFactory::make("filesink").build()?;
 
         // Configure appsrc
@@ -224,11 +236,7 @@ impl PngVideoEncoder {
         appsrc.set_property("is-live", &true);
         appsrc.set_property("stream-type", &gst_app::AppStreamType::Stream);
 
-        encoder.set_property("threads", &0u32); // auto-detect CPU cores
-        encoder.set_property("bitrate", &12000u32); // Higher bitrate (5 Mbps)
-        encoder.set_property("quantizer", &20u32); // CRF mode (18-23 for high quality)
-        encoder.set_property("sliced-threads", &true); // enable slice-based threading
-        encoder.set_property("sync-lookahead", &0); // disable lookahead for speed
+        encoder.set_property("option-string", &"crf=18:threads=0");
 
         // Configure file sink
         filesink.set_property("location", &output_path);
@@ -238,6 +246,7 @@ impl PngVideoEncoder {
             &appsrc.clone().upcast::<gst::Element>(),
             &pngdec,
             &videoconvert,
+            &h265parse,
             &encoder,
             &muxer,
             &filesink,
@@ -249,6 +258,7 @@ impl PngVideoEncoder {
             &pngdec,
             &videoconvert,
             &encoder,
+            &h265parse,
             &muxer,
             &filesink,
         ])?;
