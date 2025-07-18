@@ -207,7 +207,7 @@ impl PngVideoEncoder {
         let pngdec = gst::ElementFactory::make("pngdec").build()?;
         let videoconvert = gst::ElementFactory::make("videoconvert").build()?;
         let encoder = gst::ElementFactory::make("x264enc")
-            .property_from_str("speed-preset", "slow") // or "slower", "veryslow" for best quality
+            .property_from_str("speed-preset", "slow")
             .build()?;
         let muxer = gst::ElementFactory::make("mp4mux").build()?;
         let filesink = gst::ElementFactory::make("filesink").build()?;
@@ -225,6 +225,8 @@ impl PngVideoEncoder {
         appsrc.set_property("stream-type", &gst_app::AppStreamType::Stream);
 
         encoder.set_property("threads", &0u32); // auto-detect CPU cores
+        encoder.set_property("bitrate", &12000u32); // Higher bitrate (5 Mbps)
+        encoder.set_property("quantizer", &20u32); // CRF mode (18-23 for high quality)
         encoder.set_property("sliced-threads", &true); // enable slice-based threading
         encoder.set_property("sync-lookahead", &0); // disable lookahead for speed
 
