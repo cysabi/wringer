@@ -17,11 +17,6 @@ use wry::WebViewBuilder;
 use wry::WebViewExtMacOS;
 use wry::dpi::Size;
 
-const WIDTH: u32 = 1920;
-const HEIGHT: u32 = 1080;
-const FPS: u32 = 60;
-const FRAME_DURATION: Duration = Duration::from_millis(1000 / FPS as u64);
-
 // fn process_png_data(png_data: Vec<u8>) {
 //     if png_data.is_empty() {
 //         println!("No PNG data received");
@@ -104,11 +99,9 @@ fn main() -> wry::Result<()> {
     }
 }
 
+fn run_record(width: u32, height: u32, fps: u16, verbosity: u8) -> wry::Result<()> {
     let event_loop = EventLoop::new();
-    let size = Size::Physical(wry::dpi::PhysicalSize {
-        width: WIDTH,
-        height: HEIGHT,
-    });
+    let size = Size::Physical(wry::dpi::PhysicalSize { width, height });
     let window = WindowBuilder::new()
         .with_inner_size(size)
         .build(&event_loop)
@@ -164,11 +157,13 @@ fn main() -> wry::Result<()> {
 
     let encoder = PngVideoEncoder::new(
         "output.mkv",
-        WIDTH,
-        HEIGHT,
-        gst::Fraction::new(FPS as i32, 1),
+        width,
+        height,
+        gst::Fraction::new(fps as i32, 1),
     )
     .unwrap();
+
+    let frame_duration: Duration = Duration::from_millis(1000 / fps as u64);
 
     // Start encoder in a separate thread
     let encoder_handle = thread::spawn(move || {
@@ -198,7 +193,7 @@ fn main() -> wry::Result<()> {
         let now = Instant::now();
 
         // Check if 5 seconds have passed and we haven't taken the screenshot yet
-        if (now.duration_since(last_frame_time) >= FRAME_DURATION) && active_webview {
+        if (now.duration_since(last_frame_time) >= frame_duration) && active_webview {
             let tx_clone = tx.clone();
             webview
                 .take_snapshot(None, move |result| {
@@ -213,7 +208,7 @@ fn main() -> wry::Result<()> {
                     // let static_data: &'static [u8] = Box::leak(png_data.into_boxed_slice());
                     // encoder.push_png_buffer(static_data);
                     // process_png_data(png_data);
-                    let timestamp_ns = count as u64 * (1_000_000_000 / FPS as u64);
+                    let timestamp_ns = count as u64 * (1_000_000_000 / fps as u64);
                     let _ = tx_clone.send((png_data, timestamp_ns));
                 })
                 .unwrap();
