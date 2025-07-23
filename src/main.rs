@@ -93,8 +93,13 @@ fn main() -> wry::Result<()> {
 
     let (tx, rx) = mpsc::channel::<(Vec<u8>, u64)>();
 
-    let encoder =
-        PngVideoEncoder::new("output.mkv", WIDTH, HEIGHT, gst::Fraction::new(30, 1)).unwrap();
+    let encoder = PngVideoEncoder::new(
+        "output.mkv",
+        WIDTH,
+        HEIGHT,
+        gst::Fraction::new(FPS as i32, 1),
+    )
+    .unwrap();
 
     // Start encoder in a separate thread
     let encoder_handle = thread::spawn(move || {
