@@ -215,7 +215,9 @@ fn run_capture(width: u32, height: u32, verbosity: u8) -> wry::Result<()> {
 
 fn run_record(width: u32, height: u32, fps: u16, verbosity: u8) -> wry::Result<()> {
     let page_loaded = Arc::new(AtomicBool::new(false));
-    let (webview, event_loop) = build_webview(width, height, page_loaded)?;
+
+    let flag = page_loaded.clone();
+    let (webview, event_loop) = build_webview(width, height, flag)?;
     // Track when we started and whether we've taken the screenshot
     let start_time = Instant::now();
     let mut last_frame_time = Instant::now();
@@ -259,12 +261,14 @@ fn run_record(width: u32, height: u32, fps: u16, verbosity: u8) -> wry::Result<(
 
     // Run the event loop
     event_loop.run(move |event, _, control_flow| {
+        let loaded = page_loaded.clone();
         *control_flow = ControlFlow::Poll; // Use Poll to keep checking time
 
         let now = Instant::now();
 
         // Check if 5 seconds have passed and we haven't taken the screenshot yet
-        if (now.duration_since(last_frame_time) >= frame_duration) && active_webview {
+        if (now.duration_since(last_frame_time) >= frame_duration) && loaded.load(Ordering::Relaxed)
+        {
             let tx_clone = tx.clone();
             webview
                 .take_snapshot(None, move |result| {
