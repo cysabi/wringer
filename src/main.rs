@@ -18,21 +18,21 @@ use wry::dpi::Size;
 
 const WIDTH: u32 = 1920;
 const HEIGHT: u32 = 1080;
-const FPS: u32 = 30;
+const FPS: u32 = 60;
 const FRAME_DURATION: Duration = Duration::from_millis(1000 / FPS as u64);
 
-fn process_png_data(png_data: Vec<u8>) {
-    if png_data.is_empty() {
-        println!("No PNG data received");
-    } else {
-        let rgb = image::load_from_memory(&png_data)
-            .map_err(|e| format!("PNG decode failed: {}", e))
-            .unwrap();
+// fn process_png_data(png_data: Vec<u8>) {
+//     if png_data.is_empty() {
+//         println!("No PNG data received");
+//     } else {
+//         let rgb = image::load_from_memory(&png_data)
+//             .map_err(|e| format!("PNG decode failed: {}", e))
+//             .unwrap();
 
-        rgb.save("output.png").unwrap();
-        // println!("Screenshot saved as output.png");
-    }
-}
+//         rgb.save("output.png").unwrap();
+//         // println!("Screenshot saved as output.png");
+//     }
+// }
 
 fn main() -> wry::Result<()> {
     let event_loop = EventLoop::new();
