@@ -4,7 +4,12 @@
 use clap::{Parser, Subcommand};
 use gstreamer::prelude::*;
 use std::{
-    sync::mpsc,
+    process::ExitStatus,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    },
     thread::{self, sleep},
     time::{Duration, Instant},
 };
@@ -26,6 +31,7 @@ fn process_png_data(png_data: Vec<u8>) {
             .unwrap();
 
         rgb.save("output.png").unwrap();
+        std::process::exit(1);
         println!("Screenshot saved as output.png");
     }
 }
@@ -70,9 +76,6 @@ enum Commands {
         fps: u16,
     },
 }
-
-// Your existing PngVideoEncoder (assuming it exists)
-// struct PngVideoEncoder { ... }
 
 fn main() -> wry::Result<()> {
     let cli = Cli::parse();
@@ -154,14 +157,20 @@ fn run_capture(width: u32, height: u32, verbosity: u8) -> wry::Result<()> {
 
     let last_frame_time = Instant::now();
 
+    let snapshot_taken = Arc::new(AtomicBool::new(false));
+
+    let mut count = 0;
+
     // Run the event loop
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll; // Use Poll to keep checking time
 
+        let exit_flag = snapshot_taken.clone();
+
         let now = Instant::now();
 
         // Check if 5 seconds have passed and we haven't taken the screenshot yet
-        if (now.duration_since(last_frame_time).as_secs() >= 5) && active_webview {
+        if now.duration_since(last_frame_time).as_secs() >= 5 {
             webview
                 .take_snapshot(None, move |result| {
                     let png_data = match result {
@@ -171,6 +180,8 @@ fn run_capture(width: u32, height: u32, verbosity: u8) -> wry::Result<()> {
                             Vec::new()
                         }
                     };
+
+                    exit_flag.store(true, Ordering::SeqCst);
 
                     process_png_data(png_data);
                 })
@@ -184,14 +195,9 @@ fn run_capture(width: u32, height: u32, verbosity: u8) -> wry::Result<()> {
             } => {
                 *control_flow = ControlFlow::Exit;
             }
-            Event::RedrawRequested(_) => {
-                active_webview = true;
-            }
             _ => (),
         }
     });
-
-    Ok(())
 }
 
 fn run_record(width: u32, height: u32, fps: u16, verbosity: u8) -> wry::Result<()> {
@@ -292,8 +298,6 @@ fn run_record(width: u32, height: u32, fps: u16, verbosity: u8) -> wry::Result<(
             _ => (),
         }
     });
-
-    Ok(())
 }
 
 use gstreamer as gst;
