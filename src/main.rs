@@ -13,9 +13,9 @@ use tao::{
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
-use wry::WebViewBuilder;
 use wry::WebViewExtMacOS;
 use wry::dpi::Size;
+use wry::{WebView, WebViewBuilder};
 
 // fn process_png_data(png_data: Vec<u8>) {
 //     if png_data.is_empty() {
@@ -99,7 +99,7 @@ fn main() -> wry::Result<()> {
     }
 }
 
-fn run_record(width: u32, height: u32, fps: u16, verbosity: u8) -> wry::Result<()> {
+fn build_webview(width: u32, height: u32, fps: u16) -> wry::Result<(WebView, EventLoop<()>)> {
     let event_loop = EventLoop::new();
     let size = Size::Physical(wry::dpi::PhysicalSize { width, height });
     let window = WindowBuilder::new()
@@ -145,6 +145,11 @@ fn run_record(width: u32, height: u32, fps: u16, verbosity: u8) -> wry::Result<(
         builder.build_gtk(vbox)?
     };
 
+    Ok((webview, event_loop))
+}
+
+fn run_record(width: u32, height: u32, fps: u16, verbosity: u8) -> wry::Result<()> {
+    let (webview, event_loop) = build_webview(width, height, fps)?;
     // Track when we started and whether we've taken the screenshot
     let start_time = Instant::now();
     let mut last_frame_time = Instant::now();
@@ -241,6 +246,8 @@ fn run_record(width: u32, height: u32, fps: u16, verbosity: u8) -> wry::Result<(
             _ => (),
         }
     });
+
+    Ok(())
 }
 
 use gstreamer as gst;
