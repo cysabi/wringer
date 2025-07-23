@@ -167,25 +167,16 @@ fn build_webview(
 fn run_capture(width: u32, height: u32, verbosity: u8) -> wry::Result<()> {
     let page_loaded = Arc::new(AtomicBool::new(false));
 
-    let flag = page_loaded.clone();
-
-    let (webview, event_loop) = build_webview(width, height, flag)?;
-    let mut active_webview = false;
-
-    let last_frame_time = Instant::now();
-
-    let mut count = 0;
+    let (webview, event_loop) = build_webview(width, height, page_loaded.clone())?;
 
     // Run the event loop
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll; // Use Poll to keep checking time
 
-        let loaded = page_loaded.clone();
-
         let now = Instant::now();
 
         // Check if 5 seconds have passed and we haven't taken the screenshot yet
-        if loaded.load(Ordering::Relaxed) {
+        if page_loaded.load(Ordering::Relaxed) {
             webview
                 .take_snapshot(None, move |result| {
                     let png_data = match result {
@@ -216,8 +207,7 @@ fn run_capture(width: u32, height: u32, verbosity: u8) -> wry::Result<()> {
 fn run_record(width: u32, height: u32, fps: u16, verbosity: u8) -> wry::Result<()> {
     let page_loaded = Arc::new(AtomicBool::new(false));
 
-    let flag = page_loaded.clone();
-    let (webview, event_loop) = build_webview(width, height, flag)?;
+    let (webview, event_loop) = build_webview(width, height, page_loaded.clone())?;
     // Track when we started and whether we've taken the screenshot
     let start_time = Instant::now();
     let mut last_frame_time = Instant::now();
@@ -261,13 +251,13 @@ fn run_record(width: u32, height: u32, fps: u16, verbosity: u8) -> wry::Result<(
 
     // Run the event loop
     event_loop.run(move |event, _, control_flow| {
-        let loaded = page_loaded.clone();
         *control_flow = ControlFlow::Poll; // Use Poll to keep checking time
 
         let now = Instant::now();
 
         // Check if 5 seconds have passed and we haven't taken the screenshot yet
-        if (now.duration_since(last_frame_time) >= frame_duration) && loaded.load(Ordering::Relaxed)
+        if (now.duration_since(last_frame_time) >= frame_duration)
+            && page_loaded.load(Ordering::Relaxed)
         {
             let tx_clone = tx.clone();
             webview
