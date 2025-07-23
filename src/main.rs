@@ -1,6 +1,7 @@
 // Copyright 2020-2023 Tauri Programme within The Commons Conservancy
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-License-Identifier: MIT
+use clap::{Parser, Subcommand};
 use gstreamer::prelude::*;
 use std::{
     sync::mpsc,
@@ -34,7 +35,75 @@ const FRAME_DURATION: Duration = Duration::from_millis(1000 / FPS as u64);
 //     }
 // }
 
+#[derive(Parser)]
+#[command(name = "webview-recorder")]
+#[command(about = "A webview recording and capturing tool")]
+#[command(version = "1.0")]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+
+    /// Verbosity level (0 = quiet, 1 = normal, 2 = verbose)
+    #[arg(short, long, default_value = "1")]
+    verbosity: u8,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Capture a single screenshot of the webview
+    Capture {
+        /// Width of the webview window
+        #[arg(short, long, default_value = "1920")]
+        width: u32,
+
+        /// Height of the webview window  
+        #[arg(short, long, default_value = "1080")]
+        height: u32,
+    },
+    /// Record a video of the webview
+    Record {
+        /// Width of the webview window
+        #[arg(short, long, default_value = "1920")]
+        width: u32,
+
+        /// Height of the webview window
+        #[arg(short, long, default_value = "1080")]
+        height: u32,
+
+        /// Frames per second for recording
+        #[arg(short, long, default_value = "30")]
+        fps: u16,
+    },
+}
+
+// Your existing PngVideoEncoder (assuming it exists)
+// struct PngVideoEncoder { ... }
+
 fn main() -> wry::Result<()> {
+    let cli = Cli::parse();
+
+    match cli.command {
+        Commands::Capture { width, height } => {
+            if cli.verbosity > 0 {
+                println!(
+                    "Starting capture mode with dimensions: {}x{}",
+                    width, height
+                );
+            }
+            run_capture(width, height, cli.verbosity)
+        }
+        Commands::Record { width, height, fps } => {
+            if cli.verbosity > 0 {
+                println!(
+                    "Starting record mode with dimensions: {}x{} at {} FPS",
+                    width, height, fps
+                );
+            }
+            run_record(width, height, fps, cli.verbosity)
+        }
+    }
+}
+
     let event_loop = EventLoop::new();
     let size = Size::Physical(wry::dpi::PhysicalSize {
         width: WIDTH,
