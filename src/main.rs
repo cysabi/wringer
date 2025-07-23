@@ -17,18 +17,18 @@ use wry::WebViewExtMacOS;
 use wry::dpi::Size;
 use wry::{WebView, WebViewBuilder};
 
-// fn process_png_data(png_data: Vec<u8>) {
-//     if png_data.is_empty() {
-//         println!("No PNG data received");
-//     } else {
-//         let rgb = image::load_from_memory(&png_data)
-//             .map_err(|e| format!("PNG decode failed: {}", e))
-//             .unwrap();
+fn process_png_data(png_data: Vec<u8>) {
+    if png_data.is_empty() {
+        println!("No PNG data received");
+    } else {
+        let rgb = image::load_from_memory(&png_data)
+            .map_err(|e| format!("PNG decode failed: {}", e))
+            .unwrap();
 
-//         rgb.save("output.png").unwrap();
-//         // println!("Screenshot saved as output.png");
-//     }
-// }
+        rgb.save("output.png").unwrap();
+        println!("Screenshot saved as output.png");
+    }
+}
 
 #[derive(Parser)]
 #[command(name = "webview-recorder")]
@@ -99,7 +99,7 @@ fn main() -> wry::Result<()> {
     }
 }
 
-fn build_webview(width: u32, height: u32, fps: u16) -> wry::Result<(WebView, EventLoop<()>)> {
+fn build_webview(width: u32, height: u32) -> wry::Result<(WebView, EventLoop<()>)> {
     let event_loop = EventLoop::new();
     let size = Size::Physical(wry::dpi::PhysicalSize { width, height });
     let window = WindowBuilder::new()
@@ -148,8 +148,54 @@ fn build_webview(width: u32, height: u32, fps: u16) -> wry::Result<(WebView, Eve
     Ok((webview, event_loop))
 }
 
+fn run_capture(width: u32, height: u32, verbosity: u8) -> wry::Result<()> {
+    let (webview, event_loop) = build_webview(width, height)?;
+    let mut active_webview = false;
+
+    let last_frame_time = Instant::now();
+
+    // Run the event loop
+    event_loop.run(move |event, _, control_flow| {
+        *control_flow = ControlFlow::Poll; // Use Poll to keep checking time
+
+        let now = Instant::now();
+
+        // Check if 5 seconds have passed and we haven't taken the screenshot yet
+        if (now.duration_since(last_frame_time).as_secs() >= 5) && active_webview {
+            webview
+                .take_snapshot(None, move |result| {
+                    let png_data = match result {
+                        Ok(png_data) => png_data,
+                        Err(e) => {
+                            eprintln!("Error taking snapshot: {}", e);
+                            Vec::new()
+                        }
+                    };
+
+                    process_png_data(png_data);
+                })
+                .unwrap();
+        }
+
+        match event {
+            Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                ..
+            } => {
+                *control_flow = ControlFlow::Exit;
+            }
+            Event::RedrawRequested(_) => {
+                active_webview = true;
+            }
+            _ => (),
+        }
+    });
+
+    Ok(())
+}
+
 fn run_record(width: u32, height: u32, fps: u16, verbosity: u8) -> wry::Result<()> {
-    let (webview, event_loop) = build_webview(width, height, fps)?;
+    let (webview, event_loop) = build_webview(width, height)?;
     // Track when we started and whether we've taken the screenshot
     let start_time = Instant::now();
     let mut last_frame_time = Instant::now();
