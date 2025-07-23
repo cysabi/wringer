@@ -60,6 +60,10 @@ enum Commands {
         /// Height of the webview window  
         #[arg(short, long, default_value = "1080")]
         height: u32,
+
+        /// URL to initalize the webview with
+        #[arg(short, long, default_value = "1080")]
+        url: Url,
     },
     /// Record a video of the webview
     Record {
@@ -71,6 +75,10 @@ enum Commands {
         #[arg(short, long, default_value = "1080")]
         height: u32,
 
+        /// URL to initalize the webview with
+        #[arg(short, long, default_value = "1080")]
+        url: Url,
+
         /// Frames per second for recording
         #[arg(short, long, default_value = "30")]
         fps: u16,
@@ -81,30 +89,38 @@ fn main() -> wry::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Capture { width, height } => {
+        Commands::Capture { width, height, url } => {
             if cli.verbosity > 0 {
                 println!(
                     "Starting capture mode with dimensions: {}x{}",
                     width, height
                 );
             }
-            run_capture(width, height, cli.verbosity)
+            run_capture(width, height, url, cli.verbosity)
         }
-        Commands::Record { width, height, fps } => {
+        Commands::Record {
+            width,
+            height,
+            fps,
+            url,
+        } => {
             if cli.verbosity > 0 {
                 println!(
                     "Starting record mode with dimensions: {}x{} at {} FPS",
                     width, height, fps
                 );
             }
-            run_record(width, height, fps, cli.verbosity)
+            run_record(width, height, fps, url, cli.verbosity)
         }
     }
 }
 
+use url::Url;
+
 fn build_webview(
     width: u32,
     height: u32,
+    url: Url,
     page_load_flag: Arc<AtomicBool>,
 ) -> wry::Result<(WebView, EventLoop<()>)> {
     let event_loop = EventLoop::new();
@@ -115,7 +131,7 @@ fn build_webview(
         .unwrap();
 
     let builder = WebViewBuilder::new()
-        .with_url("https://apple.com")
+        .with_url(url.to_string())
         .with_on_page_load_handler(move |event, url| match event {
             wry::PageLoadEvent::Started => {
                 println!("Page load started: {}", url);
@@ -164,10 +180,10 @@ fn build_webview(
     Ok((webview, event_loop))
 }
 
-fn run_capture(width: u32, height: u32, verbosity: u8) -> wry::Result<()> {
+fn run_capture(width: u32, height: u32, url: Url, verbosity: u8) -> wry::Result<()> {
     let page_loaded = Arc::new(AtomicBool::new(false));
 
-    let (webview, event_loop) = build_webview(width, height, page_loaded.clone())?;
+    let (webview, event_loop) = build_webview(width, height, url, page_loaded.clone())?;
 
     // Run the event loop
     event_loop.run(move |event, _, control_flow| {
@@ -204,10 +220,10 @@ fn run_capture(width: u32, height: u32, verbosity: u8) -> wry::Result<()> {
     });
 }
 
-fn run_record(width: u32, height: u32, fps: u16, verbosity: u8) -> wry::Result<()> {
+fn run_record(width: u32, height: u32, fps: u16, url: Url, verbosity: u8) -> wry::Result<()> {
     let page_loaded = Arc::new(AtomicBool::new(false));
 
-    let (webview, event_loop) = build_webview(width, height, page_loaded.clone())?;
+    let (webview, event_loop) = build_webview(width, height, url, page_loaded.clone())?;
     // Track when we started and whether we've taken the screenshot
     let start_time = Instant::now();
     let mut last_frame_time = Instant::now();
