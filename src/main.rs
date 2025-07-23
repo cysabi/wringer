@@ -111,7 +111,7 @@ fn build_webview(width: u32, height: u32) -> wry::Result<(WebView, EventLoop<()>
         .unwrap();
 
     let builder = WebViewBuilder::new()
-        .with_url("https://www.apple.com")
+        .with_url("https://sweetgeorgiafuyupersimmons.com/")
         .with_drag_drop_handler(|e| {
             match e {
                 wry::DragDropEvent::Enter { paths, position } => {
@@ -165,8 +165,6 @@ fn run_capture(width: u32, height: u32, verbosity: u8) -> wry::Result<()> {
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll; // Use Poll to keep checking time
 
-        let exit_flag = snapshot_taken.clone();
-
         let now = Instant::now();
 
         // Check if 5 seconds have passed and we haven't taken the screenshot yet
@@ -180,8 +178,6 @@ fn run_capture(width: u32, height: u32, verbosity: u8) -> wry::Result<()> {
                             Vec::new()
                         }
                     };
-
-                    exit_flag.store(true, Ordering::SeqCst);
 
                     process_png_data(png_data);
                 })
